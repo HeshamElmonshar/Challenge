@@ -1,0 +1,89 @@
+version: "3"
+
+# Define the custom network for inter-service communication
+networks:
+  laravel:
+    driver: bridge
+
+services:
+  # Nginx service configuration
+  nginx:
+    image: nginx:alpine  # Use the official lightweight Nginx image from Docker Hub
+    container_name: nginx  # Name the container "nginx"
+    restart: unless-stopped  # Always restart the container unless it is explicitly stopped
+    tty: true  # Allocate a pseudo-TTY (useful for debugging)
+    ports:
+      - "7000:80"  # Map port 7000 on the host to port 80 on the container
+    volumes:
+      - ./api/nginx/default.conf:/etc/nginx/conf.d/default.conf  # Mount the custom Nginx config file
+      - ./api:/var/www/app:delegated  # Mount the API code directory into the container
+    depends_on:
+      - php  # Ensure the PHP service starts before Nginx
+    networks:
+      - laravel  # Connect to the custom network "laravel"
+
+  # PHP service configuration (for Laravel API)
+  php:
+    build:
+      context: ./api  # Set the build context to the "api" directory
+      dockerfile: Dockerfile  # Use the Dockerfile located in the "api" directory
+    container_name: php  # Name the container "php"
+    restart: unless-stopped  # Always restart the container unless it is explicitly stopped
+    tty: true  # Allocate a pseudo-TTY (useful for debugging)
+    expose:
+      - "9000"  # Expose port 9000 to other services (not to the host)
+    volumes:
+      - ./api:/var/www/app:delegated  # Mount the API code directory into the container
+    networks:
+      - laravel  # Connect to the custom network "laravel"
+
+  # MySQL service configuration
+  mysql:
+    image: mysql:5.7  # Use the official MySQL 5.7 image from Docker Hub
+    container_name: mysql  # Name the container "mysql"
+    restart: unless-stopped  # Always restart the container unless it is explicitly stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword  # Set the root password for MySQL
+      MYSQL_DATABASE: bookapi  # Create a default database named "bookapi"
+      MYSQL_USER: app  # Create a default user named "app"
+      MYSQL_PASSWORD: password  # Set the password for the "app" user
+    volumes:
+      - mysql_data:/var/lib/mysql  # Persist MySQL data using a named volume
+    networks:
+      - laravel  # Connect to the custom network "laravel"
+
+  # phpMyAdmin service configuration
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin  # Use the official phpMyAdmin image from Docker Hub
+    container_name: phpmyadmin  # Name the container "phpmyadmin"
+    restart: unless-stopped  # Always restart the container unless it is explicitly stopped
+    environment:
+      PMA_HOST: mysql  # Set the hostname for the MySQL server
+      MYSQL_ROOT_PASSWORD: rootpassword  # Provide the root password for MySQL
+    ports:
+      - "8081:80"  # Map port 8081 on the host to port 80 on the container
+    depends_on:
+      - mysql  # Ensure the MySQL service starts before phpMyAdmin
+    networks:
+      - laravel  # Connect to the custom network "laravel"
+
+  # Nuxt.js client service configuration
+  nuxt-app:
+    build:
+      context: ./client  # Set the build context to the "client" directory
+      dockerfile: Dockerfile  # Use the Dockerfile located in the "client" directory
+    container_name: nuxt-app  # Name the container "nuxt-app"
+    ports:
+      - "3000:3000"  # Map port 3000 on the host to port 3000 on the container
+    environment:
+      - NODE_ENV=production  # Set the Node environment to production
+    volumes:
+      - ./client:/app  # Mount the client code directory into the container
+    command: npm run serve  # Run the Nuxt.js application in serve mode
+    networks:
+      - laravel  # Connect to the custom network "laravel"
+
+# Define named volumes for persistent data storage
+volumes:
+  mysql_data:
+    driver: local  # Use the local driver for volume storage
